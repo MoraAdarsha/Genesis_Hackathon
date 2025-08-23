@@ -21,7 +21,7 @@ def load_models():
     try:
         models = {}
         for router in ['A', 'B', 'C']:
-            models[router] = joblib.load(f"../models/model{router}_p.pkl")
+            models[router] = joblib.load(f"../models/model{router}_p")
         return models
     except FileNotFoundError as e:
         st.error(f"Model files not found. Please ensure model files are in the same directory: {e}")
