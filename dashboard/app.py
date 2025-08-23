@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from sklearn.preprocessing import LabelEncoder
+import os
 
 # Page config
 st.set_page_config(
@@ -20,8 +21,12 @@ def load_models():
     """Load pre-trained XGBoost models for each router"""
     try:
         models = {}
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # dashboard folder
+        parent_dir = os.path.dirname(current_dir)  # project_folder
+        models_dir = os.path.join(parent_dir, "models")
         for router in ['A', 'B', 'C']:
-            models[router] = joblib.load(f"../models/model{router}_p")
+            model_path = os.path.join(models_dir, f"model{router}_p.pkl")
+            models[router] = joblib.load(model_path)
         return models
     except FileNotFoundError as e:
         st.error(f"Model files not found. Please ensure model files are in the same directory: {e}")
