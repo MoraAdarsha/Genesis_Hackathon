@@ -43,6 +43,8 @@ def create_training_samples_single(data, target_timestamp, hours=12):
     """
     Create features for a single prediction using last 12 hours of data
     """
+    # Ensure target_timestamp is a pandas Timestamp
+    target_timestamp = pd.to_datetime(target_timestamp)
     window_start = target_timestamp - pd.Timedelta(hours=hours)
     window_end = target_timestamp
     
@@ -271,7 +273,8 @@ def main():
             
             # Get latest timestamp and create prediction window
             latest_time = df['Timestamp'].max()
-            prediction_time = latest_time + pd.Timedelta(hours=1)
+            prediction_time = pd.to_datetime(latest_time) + pd.Timedelta(hours=1)
+
             
             st.success(f"✅ Data loaded successfully! {len(df)} records")
             st.info(f"📅 Latest data: {latest_time}")
@@ -308,7 +311,8 @@ def main():
                             st.error("❌ Not enough data for prediction. Need at least 12 hours of historical data.")
                         else:
                             # Get window data for recommendations
-                            window_start = latest_time - pd.Timedelta(hours=12)
+                            window_start = pd.to_datetime(latest_time) - pd.Timedelta(hours=12)
+
                             window_data = df[(df['Timestamp'] >= window_start) & 
                                            (df['Timestamp'] <= latest_time)]
                             
