@@ -363,7 +363,7 @@ def main():
                         recommendations = bandwidth_recommendation(window_data, congestion_probs)
                         
                         # Display results
-                        st.subheader(f"🎯 Congestion Predictions for {latest_time}")
+                        st.subheader(f"🎯 Congestion Predictions for {prediction_time}")
                         
                         # Create metrics
                         prob_cols = st.columns(3)
