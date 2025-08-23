@@ -21,7 +21,7 @@ def load_models():
     """Load pre-trained XGBoost models for each router"""
     try:
         models = {}
-        current_dir = os.path.dirname(os.path.abspath(__file__))  # dashboard folder
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # dashboard foldergi
         parent_dir = os.path.dirname(current_dir)  # project_folder
         models_dir = os.path.join(parent_dir, "models")
         
@@ -438,7 +438,7 @@ def main():
                             'Recommendation': entry['recommendations'][router]['action']
                         })
                 
-                if history_
+                if history_data:
                     history_df = pd.DataFrame(history_data)
                     st.dataframe(history_df, use_container_width=True)
                 
