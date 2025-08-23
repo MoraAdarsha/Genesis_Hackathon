@@ -24,12 +24,13 @@ def load_models():
         current_dir = os.path.dirname(os.path.abspath(__file__))  # dashboard folder
         parent_dir = os.path.dirname(current_dir)  # project_folder
         models_dir = os.path.join(parent_dir, "models")
+        
         for router in ['A', 'B', 'C']:
             model_path = os.path.join(models_dir, f"model{router}_p.pkl")
             models[router] = joblib.load(model_path)
         return models
     except FileNotFoundError as e:
-        st.error(f"Model files not found. Please ensure model files are in the same directory: {e}")
+        st.error(f"Model files not found at {models_dir}: {e}")
         return None
 
 # Load label encoder for Impact column
@@ -37,7 +38,9 @@ def load_models():
 def load_label_encoder():
     """Load or create label encoder for Impact column"""
     try:
-        return joblib.load("label_encoder_impact.pkl")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        encoder_path = os.path.join(current_dir, "label_encoder_impact.pkl")
+        return joblib.load(encoder_path)
     except FileNotFoundError:
         # Create a default encoder if file doesn't exist
         le = LabelEncoder()
@@ -48,10 +51,21 @@ def create_training_samples_single(data, target_timestamp, hours=12):
     """
     Create features for a single prediction using last 12 hours of data
     """
-    # Ensure target_timestamp is a pandas Timestamp
-    target_timestamp = pd.to_datetime(target_timestamp)
-    window_start = target_timestamp - pd.Timedelta(hours=hours)
-    window_end = target_timestamp
+    # Convert target_timestamp to datetime for arithmetic
+    if isinstance(target_timestamp, str):
+        target_dt = pd.to_datetime(target_timestamp).to_pydatetime()
+    elif isinstance(target_timestamp, pd.Timestamp):
+        target_dt = target_timestamp.to_pydatetime()
+    else:
+        target_dt = target_timestamp
+    
+    # Use Python datetime arithmetic
+    window_start_dt = target_dt - timedelta(hours=hours)
+    window_end_dt = target_dt
+    
+    # Convert back to pandas timestamps for filtering
+    window_start = pd.to_datetime(window_start_dt)
+    window_end = pd.to_datetime(window_end_dt)
     
     window_data = data[(data['Timestamp'] >= window_start) & (data['Timestamp'] < window_end)]
     
@@ -79,7 +93,7 @@ def create_training_samples_single(data, target_timestamp, hours=12):
                     row['total_logins']
                 ])
             else:
-                features.extend([0,0,0,0,0,0,0,0,0])
+                features.extend([0, 0, 0, 0, 0, 0, 0, 0, 0])
     
     return np.array(features).reshape(1, -1)
 
@@ -94,9 +108,14 @@ def predict_congestion_proba(df, models, target_timestamp):
     
     proba_results = {}
     for router in ['Router_A', 'Router_B', 'Router_C']:
-        if router in models:
-            proba = models[router].predict_proba(features)[0, 1]
-            proba_results[router] = proba
+        model_key = router.split('_')[1]  # Convert Router_A to A
+        if model_key in models:
+            try:
+                proba = models[model_key].predict_proba(features)[0, 1]
+                proba_results[router] = proba
+            except Exception as e:
+                st.warning(f"Error predicting for {router}: {e}")
+                proba_results[router] = 0.0
         else:
             proba_results[router] = 0.0
     
@@ -115,7 +134,11 @@ def bandwidth_recommendation(window_data, congestion_probs):
             recommendations[router] = {
                 'action': 'monitor',
                 'amount': 0,
-                'reason': 'No data available in window'
+                'reason': 'No data available in window',
+                'utilization': 0,
+                'congestion_prob': 0,
+                'current_allocated': 0,
+                'current_used': 0
             }
             continue
         
@@ -139,7 +162,6 @@ def bandwidth_recommendation(window_data, congestion_probs):
                 amount = current_allocated * 0.25
                 action = 'increase_bandwidth'
                 reason = f'HIGH RISK: Congestion probability ({congestion_prob:.2f}) requires bandwidth increase'
-                
         elif congestion_prob >= 0.6:
             if utilization >= 0.8:
                 amount = current_allocated * 0.2
@@ -153,7 +175,6 @@ def bandwidth_recommendation(window_data, congestion_probs):
                 amount = 0
                 action = 'monitor_closely'
                 reason = f'WATCH: Medium congestion risk ({congestion_prob:.2f}) - monitor for changes'
-                
         elif congestion_prob >= 0.4:
             if utilization >= 0.85:
                 amount = current_allocated * 0.1
@@ -163,7 +184,6 @@ def bandwidth_recommendation(window_data, congestion_probs):
                 amount = 0
                 action = 'monitor'
                 reason = f'NORMAL: Moderate risk ({congestion_prob:.2f}) within acceptable range'
-                
         elif congestion_prob <= 0.2:
             if utilization <= 0.4:
                 amount = -min(current_allocated * 0.15, 20)
@@ -215,9 +235,9 @@ def create_visualizations(df, target_time, congestion_probs, recommendations):
     prob_values = [congestion_probs[router] * 100 for router in router_names]
     
     fig_prob = go.Figure(data=[
-        go.Bar(x=router_names, y=prob_values, 
+        go.Bar(x=router_names, y=prob_values,
                marker_color=['red' if p > 70 else 'orange' if p > 40 else 'green' 
-                            for p in prob_values])
+                           for p in prob_values])
     ])
     fig_prob.update_layout(title='Congestion Probability (%)', 
                           yaxis_title='Probability (%)')
@@ -235,7 +255,7 @@ def create_visualizations(df, target_time, congestion_probs, recommendations):
     util_df = pd.DataFrame(utilization_data)
     fig_util = px.bar(util_df, x='Router', y='Utilization (%)', 
                      title='Current Bandwidth Utilization',
-                     color='Utilization (%)', 
+                     color='Utilization (%)',
                      color_continuous_scale=['green', 'yellow', 'red'])
     
     return fig_traffic, fig_prob, fig_util
@@ -254,7 +274,7 @@ def main():
     
     # File upload
     uploaded_file = st.file_uploader(
-        "Upload Network Traffic CSV", 
+        "Upload Network Traffic CSV",
         type=['csv'],
         help="Upload CSV with columns: Timestamp, Device Name, Traffic Volume (MB/s), Latency (ms), Bandwidth Used (MB/s), Bandwidth Allocated (MB/s), total_avg_app_traffic, total_peak_app_traffic, Impact, total_peak_user_usage, total_logins"
     )
@@ -263,7 +283,16 @@ def main():
         try:
             # Load and process data
             df = pd.read_csv(uploaded_file)
-            df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+            
+            # Ensure Timestamp column is properly converted
+            df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
+            
+            # Remove any rows with invalid timestamps
+            df = df.dropna(subset=['Timestamp'])
+            
+            if df.empty:
+                st.error("❌ No valid data found. Please check your timestamp format.")
+                st.stop()
             
             # Handle Impact column encoding
             if 'Impact' in df.columns:
@@ -276,13 +305,21 @@ def main():
             else:
                 df['Impact_encoded'] = 0
             
-            # Get latest timestamp and create prediction window
+            # Get latest timestamp and create prediction window using datetime arithmetic
             latest_time = df['Timestamp'].max()
-            prediction_time = pd.to_datetime(latest_time) + pd.Timedelta(hours=1)
-
+            
+            # Convert to datetime for arithmetic
+            if isinstance(latest_time, pd.Timestamp):
+                latest_dt = latest_time.to_pydatetime()
+            else:
+                latest_dt = pd.to_datetime(latest_time).to_pydatetime()
+            
+            # Calculate prediction time
+            prediction_dt = latest_dt + timedelta(hours=1)
+            prediction_time = pd.to_datetime(prediction_dt)
             
             st.success(f"✅ Data loaded successfully! {len(df)} records")
-            st.info(f"📅 Latest data: {latest_time}")
+            st.info(f"📅 Latest  {latest_time}")
             st.info(f"🔮 Predicting congestion for: {prediction_time}")
             
             # Create columns for layout
@@ -306,92 +343,91 @@ def main():
                 st.write(f"**Prediction Window:** Next 1 hour")
                 st.write(f"**Historical Window:** Last 12 hours")
                 st.write(f"**Routers:** Router_A, Router_B, Router_C")
-                
-                if st.button("🔄 Run Prediction", type="primary"):
-                    with st.spinner("Running predictions..."):
-                        # Make predictions
-                        congestion_probs = predict_congestion_proba(df, models, latest_time)
+            
+            if st.button("🔄 Run Prediction", type="primary"):
+                with st.spinner("Running predictions..."):
+                    # Make predictions
+                    congestion_probs = predict_congestion_proba(df, models, latest_time)
+                    
+                    if congestion_probs is None:
+                        st.error("❌ Not enough data for prediction. Need at least 12 hours of historical data.")
+                    else:
+                        # Get window data for recommendations using datetime arithmetic
+                        window_start_dt = latest_dt - timedelta(hours=12)
+                        window_start = pd.to_datetime(window_start_dt)
                         
-                        if congestion_probs is None:
-                            st.error("❌ Not enough data for prediction. Need at least 12 hours of historical data.")
-                        else:
-                            # Get window data for recommendations
-                            window_start = pd.to_datetime(latest_time) - pd.Timedelta(hours=12)
-
-                            window_data = df[(df['Timestamp'] >= window_start) & 
-                                           (df['Timestamp'] <= latest_time)]
-                            
-                            # Get recommendations
-                            recommendations = bandwidth_recommendation(window_data, congestion_probs)
-                            
-                            # Display results
-                            st.subheader("🎯 Congestion Predictions")
-                            
-                            # Create metrics
-                            prob_cols = st.columns(3)
-                            for i, (router, prob) in enumerate(congestion_probs.items()):
-                                with prob_cols[i]:
-                                    color = "🔴" if prob > 0.7 else "🟡" if prob > 0.4 else "🟢"
-                                    st.metric(
-                                        label=f"{color} {router}",
-                                        value=f"{prob:.1%}",
-                                        delta=None
-                                    )
-                            
-                            # Recommendations
-                            st.subheader("💡 Bandwidth Recommendations")
-                            
-                            for router, rec in recommendations.items():
-                                with st.expander(f"{router} - {rec['action'].replace('_', ' ').title()}"):
-                                    col_a, col_b = st.columns(2)
+                        window_data = df[(df['Timestamp'] >= window_start) & 
+                                       (df['Timestamp'] <= latest_time)]
+                        
+                        # Get recommendations
+                        recommendations = bandwidth_recommendation(window_data, congestion_probs)
+                        
+                        # Display results
+                        st.subheader("🎯 Congestion Predictions")
+                        
+                        # Create metrics
+                        prob_cols = st.columns(3)
+                        for i, (router, prob) in enumerate(congestion_probs.items()):
+                            with prob_cols[i]:
+                                color = "🔴" if prob > 0.7 else "🟡" if prob > 0.4 else "🟢"
+                                st.metric(
+                                    label=f"{color} {router}",
+                                    value=f"{prob:.1%}",
+                                    delta=None
+                                )
+                        
+                        # Recommendations
+                        st.subheader("💡 Bandwidth Recommendations")
+                        for router, rec in recommendations.items():
+                            with st.expander(f"{router} - {rec['action'].replace('_', ' ').title()}"):
+                                col_a, col_b = st.columns(2)
+                                
+                                with col_a:
+                                    if rec['amount'] > 0:
+                                        st.success(f"📈 Increase by {rec['amount']} MB/s")
+                                    elif rec['amount'] < 0:
+                                        st.info(f"📉 Decrease by {abs(rec['amount'])} MB/s")
+                                    else:
+                                        st.info("➡️ Maintain current allocation")
                                     
-                                    with col_a:
-                                        if rec['amount'] > 0:
-                                            st.success(f"📈 Increase by {rec['amount']} MB/s")
-                                        elif rec['amount'] < 0:
-                                            st.info(f"📉 Decrease by {abs(rec['amount'])} MB/s")
-                                        else:
-                                            st.info("➡️ Maintain current allocation")
-                                        
-                                        st.write(f"**Utilization:** {rec['utilization']:.1%}")
-                                        st.write(f"**Congestion Risk:** {rec['congestion_prob']:.1%}")
-                                    
-                                    with col_b:
-                                        st.write(f"**Current Allocated:** {rec['current_allocated']:.1f} MB/s")
-                                        st.write(f"**Current Used:** {rec['current_used']:.1f} MB/s")
-                                        st.write(f"**Reason:** {rec['reason']}")
-                            
-                            # Visualizations
-                            st.subheader("📊 Visualizations")
-                            
-                            fig_traffic, fig_prob, fig_util = create_visualizations(
-                                df, latest_time, congestion_probs, recommendations
-                            )
-                            
-                            st.plotly_chart(fig_traffic, use_container_width=True)
-                            
-                            viz_col1, viz_col2 = st.columns(2)
-                            with viz_col1:
-                                st.plotly_chart(fig_prob, use_container_width=True)
-                            with viz_col2:
-                                st.plotly_chart(fig_util, use_container_width=True)
-                            
-                            # Store in session state for history
-                            if 'prediction_history' not in st.session_state:
-                                st.session_state.prediction_history = []
-                            
-                            st.session_state.prediction_history.append({
-                                'timestamp': datetime.now(),
-                                'prediction_for': prediction_time,
-                                'congestion_probs': congestion_probs,
-                                'recommendations': recommendations
-                            })
+                                    st.write(f"**Utilization:** {rec['utilization']:.1%}")
+                                    st.write(f"**Congestion Risk:** {rec['congestion_prob']:.1%}")
+                                
+                                with col_b:
+                                    st.write(f"**Current Allocated:** {rec['current_allocated']:.1f} MB/s")
+                                    st.write(f"**Current Used:** {rec['current_used']:.1f} MB/s")
+                                    st.write(f"**Reason:** {rec['reason']}")
+                        
+                        # Visualizations
+                        st.subheader("📊 Visualizations")
+                        fig_traffic, fig_prob, fig_util = create_visualizations(
+                            df, latest_time, congestion_probs, recommendations
+                        )
+                        
+                        st.plotly_chart(fig_traffic, use_container_width=True)
+                        
+                        viz_col1, viz_col2 = st.columns(2)
+                        with viz_col1:
+                            st.plotly_chart(fig_prob, use_container_width=True)
+                        with viz_col2:
+                            st.plotly_chart(fig_util, use_container_width=True)
+                        
+                        # Store in session state for history
+                        if 'prediction_history' not in st.session_state:
+                            st.session_state.prediction_history = []
+                        
+                        st.session_state.prediction_history.append({
+                            'timestamp': datetime.now(),
+                            'prediction_for': prediction_time,
+                            'congestion_probs': congestion_probs,
+                            'recommendations': recommendations
+                        })
             
             # Prediction History
             if 'prediction_history' in st.session_state and st.session_state.prediction_history:
                 st.subheader("📜 Prediction History")
-                
                 history_data = []
+                
                 for entry in st.session_state.prediction_history[-10:]:  # Last 10 predictions
                     for router, prob in entry['congestion_probs'].items():
                         history_data.append({
@@ -402,14 +438,14 @@ def main():
                             'Recommendation': entry['recommendations'][router]['action']
                         })
                 
-                if history_data:
+                if history_
                     history_df = pd.DataFrame(history_data)
                     st.dataframe(history_df, use_container_width=True)
-                    
-                    if st.button("🗑️ Clear History"):
-                        st.session_state.prediction_history = []
-                        st.rerun()
-        
+                
+                if st.button("🗑️ Clear History"):
+                    st.session_state.prediction_history = []
+                    st.rerun()
+                        
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
             st.write("Please check that your CSV has the required columns:")
@@ -418,7 +454,7 @@ Required columns:
 - Timestamp
 - Device Name (Router_A, Router_B, Router_C)
 - Traffic Volume (MB/s)
-- Latency (ms)
+- Latency (ms)  
 - Bandwidth Used (MB/s)
 - Bandwidth Allocated (MB/s)
 - total_avg_app_traffic
@@ -426,7 +462,7 @@ Required columns:
 - Impact
 - total_peak_user_usage
 - total_logins
-            """)
+""")
 
 if __name__ == "__main__":
     main()
