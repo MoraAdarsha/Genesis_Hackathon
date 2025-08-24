@@ -323,7 +323,7 @@ def main():
 
         # ... the rest of your code continues as before ...
 
-    except Exception as e:
+       except Exception as e:
         st.error(f"❌ Error processing file: {str(e)}")
         # ... your exception handling code ...
             
