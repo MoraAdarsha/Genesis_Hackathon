@@ -283,27 +283,49 @@ def main():
         help="Upload CSV with columns: Timestamp, Device Name, Traffic Volume (MB/s), Latency (ms), Bandwidth Used (MB/s), Bandwidth Allocated (MB/s), total_avg_app_traffic, total_peak_app_traffic, Impact, total_peak_user_usage, total_logins"
     )
     if uploaded_file is not None:
-        try:
-# Load and process data
-            df = pd.read_csv(uploaded_file)
+       try:
+        # Load data
+        df = pd.read_csv(uploaded_file)
+        
+        # --- DEFINITIVE FIX STARTS HERE ---
+        
+        # 1. Handle the timestamp column separately
+        df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
+        
+        # 2. Define ALL columns that should NOT be converted to numeric
+        # This is the key change: adding 'Date' and 'Event'
+        non_numeric_cols = ['Timestamp', 'Device Name', 'Impact', 'Date', 'Event']
+        
+        # 3. Loop through all other columns and convert them to numbers
+        for col in df.columns:
+            if col not in non_numeric_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # 4. Drop rows where essential conversions failed (like the timestamp)
+        # We only check Timestamp here because other failures might be acceptable (e.g., a blank cell)
+        df = df.dropna(subset=['Timestamp'])
+        
+        # --- DEFINITIVE FIX ENDS HERE ---
+        
+        if df.empty:
+            st.error("❌ No valid data rows found after cleaning. Please check your CSV file.")
+            st.stop()
             
-            # 1. Convert Timestamp column
-            df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
-            
-            # 2. Define and convert all expected numeric columns
-            numeric_cols = [
-                'Traffic Volume (MB/s)', 'Latency (ms)', 
-                'Bandwidth Used (MB/s)', 'Bandwidth Allocated (MB/s)',
-                'total_avg_app_traffic', 'total_peak_app_traffic',
-                'total_peak_user_usage', 'total_logins'
-            ]
-            
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            # 3. Drop rows where essential columns failed to parse
-            df = df.dropna(subset=['Timestamp'] + numeric_cols)
+        # Handle Impact column encoding
+        if 'Impact' in df.columns:
+            df['Impact'] = df['Impact'].fillna('None')
+            try:
+                df['Impact_encoded'] = le_impact.transform(df['Impact'])
+            except ValueError:
+                df['Impact_encoded'] = 0
+        else:
+            df['Impact_encoded'] = 0
+
+        # ... the rest of your code continues as before ...
+
+    except Exception as e:
+        st.error(f"❌ Error processing file: {str(e)}")
+        # ... your exception handling code ...
             
             if df.empty:
                 st.error("❌ No valid data found. Please check your timestamp format.")
