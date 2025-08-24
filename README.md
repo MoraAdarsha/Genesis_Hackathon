@@ -147,3 +147,102 @@ The `bandwidth_recommendation` function acts as the final decision-logic layer, 
     * **Action**: If utilization is also low (<40%), `decrease_bandwidth` (-15%) to improve efficiency and reduce costs.
 * **STABLE/NORMAL (all other cases)**: The network is operating within acceptable parameters.
     * **Action**: `maintain` current allocation or `monitor` for changes.
+ 
+
+
+Of course. Here is a comprehensive `README.md` file for your GitHub repository that explains the project's inputs, outputs, and visualizations based on the provided code.
+
+-----
+
+##  Proactive Network Congestion Dashboard
+In dashboard directory there is the python script of streamlit application, which defines the dashboard of project over streamlit, utilizing the models in the corresponding directories.
+
+-----
+
+###  Input: What the Dashboard Needs
+
+To function correctly, the application requires two main types of input: a primary dataset and pre-trained machine learning assets.
+
+#### 1\. Primary Data Source
+
+The core input is a **time-series dataset** of network metrics, typically in a CSV file (or a Pandas DataFrame). This dataset must contain the following columns for the feature engineering process to work:
+
+  * `Timestamp`: The date and time of the data record (datetime object).
+  * `Device Name`: The identifier for the network device (e.g., 'Router\_A', 'Router\_B').
+  * `Traffic Volume (MB/s)`: The volume of traffic passing through the device.
+  * `Latency (ms)`: The network latency at that time.
+  * `Bandwidth Used (MB/s)`: The amount of bandwidth currently in use.
+  * `Bandwidth Allocated (MB/s)`: The total bandwidth allocated to the device.
+  * `total_avg_app_traffic`: A feature representing the average application traffic.
+  * `total_peak_app_traffic`: A feature representing the peak application traffic.
+  * `Impact_encoded`: A **numerical** representation of congestion impact (e.g., 0 for 'None', 1 for 'Low', etc.).
+  * `total_peak_user_usage`: A feature for peak usage by users.
+  * `total_logins`: The total number of logins.
+
+#### 2\. Pre-trained Machine Learning Assets
+
+The application relies on assets generated from a separate model training process.
+
+  * **XGBoost Models:** For each router (`A`, `B`, `C`), a pre-trained XGBoost model must be saved as a `.pkl` file using `joblib`. These files should be named `modelA_p.pkl`, `modelB_p.pkl`, etc., and placed in a `models/` directory located one level above the script's folder.
+  * **Label Encoder:** A fitted `LabelEncoder` object from scikit-learn, saved as `label_encoder_impact.pkl`. This is used to consistently transform the `Impact` feature. The code includes a fallback to create a default encoder if this file is missing.
+
+-----
+
+###  Output: What the Dashboard Provides
+
+The dashboard processes the input data and produces two key outputs: numerical predictions and actionable recommendations.
+
+#### 1\. Congestion Probabilities
+
+For each router, the primary output of the machine learning model is a **congestion probability**. This is a floating-point number between `0.0` and `1.0`, where:
+
+  * A value close to `0.0` indicates a **very low risk** of congestion.
+  * A value close to `1.0` indicates a **very high risk** of congestion.
+
+These probabilities are the core data points used for all subsequent analysis and recommendations.
+
+#### 2\. Bandwidth Recommendations
+
+The dashboard translates the raw probabilities into clear, human-readable recommendations for each router. The recommendation engine considers the congestion probability, current bandwidth utilization, and latency to generate a structured output containing:
+
+  * **`action`**: A suggested course of action (e.g., `'increase_bandwidth'`, `'monitor_closely'`, `'decrease_bandwidth'`).
+  * **`amount`**: The recommended change in bandwidth in MB/s. This will be positive for an increase and negative for a decrease.
+  * **`reason`**: A plain-English explanation for the recommendation, providing context for the administrator (e.g., `'CRITICAL: High congestion probability (0.92) with 95% utilization'`).
+
+-----
+
+###  How It Visualizes Data
+
+The dashboard uses the Plotly library to create three main interactive visualizations that allow for easy interpretation of the network's health.
+
+#### 1\. Traffic Volume Over Time
+
+This is a **line chart** that plots the `Traffic Volume (MB/s)` for each router over the selected time period.
+
+  * **Purpose**: To show trends, patterns, and spikes in network traffic.
+  * **Features**:
+      * Each router is represented by a different colored line.
+      * A **vertical dashed red line** is drawn on the chart to mark the specific "Prediction Point," giving crucial context to the other visualizations.
+
+#### 2\. Congestion Probability (%)
+
+This is a **bar chart** that provides an at-a-glance summary of the current congestion risk.
+
+  * **Purpose**: To immediately identify which routers are at risk.
+  * **Features**:
+      * Each bar corresponds to a router, with the bar's height representing the predicted congestion probability (scaled to 100).
+      * The bars are **dynamically color-coded** based on risk level:
+          * **\<span style="color:green"\>■\</span\> Green:** Low risk (Probability \< 40%)
+          * **\<span style="color:orange"\>■\</span\> Orange:** Medium risk (Probability 40% - 70%)
+          * **\<span style="color:red"\>■\</span\> Red:** High risk (Probability \> 70%)
+
+#### 3\. Current Bandwidth Utilization
+
+This **bar chart** shows how efficiently the allocated bandwidth is being used for each router.
+
+  * **Purpose**: To diagnose if high congestion is related to high resource usage.
+  * **Features**:
+      * Each bar shows the utilization percentage ($$\frac{\text{Bandwidth Used}}{\text{Bandwidth Allocated}} \times 100$$).
+      * The bars are colored along a **continuous green-yellow-red gradient**, providing a smooth visual indicator of utilization levels.
+   
+__THE VISUALIZATION SECTION IS UNDER DEVLOPMENT RIGHT NOW.__
