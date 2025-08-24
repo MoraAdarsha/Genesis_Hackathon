@@ -223,12 +223,16 @@ def bandwidth_recommendation(window_data, congestion_probs):
 
 def create_visualizations(df, target_time, congestion_probs, recommendations):
     """Create visualizations for the dashboard"""
-    
-    # 1. Traffic Volume Over Time
+    # Convert target_time to string for Plotly add_vline
+    if hasattr(target_time, "strftime"):
+        target_time_str = target_time.strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        target_time_str = str(target_time)
     fig_traffic = px.line(df, x='Timestamp', y='Traffic Volume (MB/s)', 
                          color='Device Name', title='Traffic Volume Over Time')
-    fig_traffic.add_vline(x=target_time, line_dash="dash", line_color="red", 
+    fig_traffic.add_vline(x=target_time_str, line_dash="dash", line_color="red", 
                          annotation_text="Prediction Point")
+    
     
     # 2. Congestion Probabilities
     router_names = list(congestion_probs.keys())
@@ -347,8 +351,8 @@ def main():
             if st.button("🔄 Run Prediction", type="primary"):
                 with st.spinner("Running predictions..."):
                     # Make predictions
-                    congestion_probs = predict_congestion_proba(df, models, latest_time)
-                    
+                    congestion_probs = predict_congestion_proba(df, models, prediction_time)
+
                     if congestion_probs is None:
                         st.error("❌ Not enough data for prediction. Need at least 12 hours of historical data.")
                     else:
