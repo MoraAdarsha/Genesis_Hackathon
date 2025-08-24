@@ -284,25 +284,25 @@ def main():
     )
     
 # Load and process data
-            df = pd.read_csv(uploaded_file)
-            
-            # 1. Convert Timestamp column
-            df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
-            
-            # 2. Define and convert all expected numeric columns
-            numeric_cols = [
-                'Traffic Volume (MB/s)', 'Latency (ms)', 
-                'Bandwidth Used (MB/s)', 'Bandwidth Allocated (MB/s)',
-                'total_avg_app_traffic', 'total_peak_app_traffic',
-                'total_peak_user_usage', 'total_logins'
-            ]
-            
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            # 3. Drop rows where essential columns failed to parse
-            df = df.dropna(subset=['Timestamp'] + numeric_cols)
+        df = pd.read_csv(uploaded_file)
+        
+        # 1. Convert Timestamp column
+        df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
+        
+        # 2. Define and convert all expected numeric columns
+        numeric_cols = [
+            'Traffic Volume (MB/s)', 'Latency (ms)', 
+            'Bandwidth Used (MB/s)', 'Bandwidth Allocated (MB/s)',
+            'total_avg_app_traffic', 'total_peak_app_traffic',
+            'total_peak_user_usage', 'total_logins'
+        ]
+        
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # 3. Drop rows where essential columns failed to parse
+        df = df.dropna(subset=['Timestamp'] + numeric_cols)
             
             if df.empty:
                 st.error("❌ No valid data found. Please check your timestamp format.")
