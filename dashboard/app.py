@@ -347,7 +347,7 @@ def main():
             if st.button("🔄 Run Prediction", type="primary"):
                 with st.spinner("Running predictions..."):
                     # Make predictions
-                    congestion_probs = predict_congestion_proba(df, models, latest_time)
+                    congestion_probs = predict_congestion_proba(df, models, prediction_time)
                     
                     if congestion_probs is None:
                         st.error("❌ Not enough data for prediction. Need at least 12 hours of historical data.")
