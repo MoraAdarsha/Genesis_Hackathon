@@ -283,16 +283,26 @@ def main():
         help="Upload CSV with columns: Timestamp, Device Name, Traffic Volume (MB/s), Latency (ms), Bandwidth Used (MB/s), Bandwidth Allocated (MB/s), total_avg_app_traffic, total_peak_app_traffic, Impact, total_peak_user_usage, total_logins"
     )
     
-    if uploaded_file is not None:
-        try:
-            # Load and process data
+# Load and process data
             df = pd.read_csv(uploaded_file)
             
-            # Ensure Timestamp column is properly converted
+            # 1. Convert Timestamp column
             df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')
             
-            # Remove any rows with invalid timestamps
-            df = df.dropna(subset=['Timestamp'])
+            # 2. Define and convert all expected numeric columns
+            numeric_cols = [
+                'Traffic Volume (MB/s)', 'Latency (ms)', 
+                'Bandwidth Used (MB/s)', 'Bandwidth Allocated (MB/s)',
+                'total_avg_app_traffic', 'total_peak_app_traffic',
+                'total_peak_user_usage', 'total_logins'
+            ]
+            
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # 3. Drop rows where essential columns failed to parse
+            df = df.dropna(subset=['Timestamp'] + numeric_cols)
             
             if df.empty:
                 st.error("❌ No valid data found. Please check your timestamp format.")
@@ -405,7 +415,7 @@ def main():
                         # Visualizations
                         st.subheader("📊 Visualizations")
                         fig_traffic, fig_prob, fig_util = create_visualizations(
-                            df, latest_time, congestion_probs, recommendations
+                            df, prediction_time, congestion_probs, recommendations # <-- Use prediction_time here
                         )
                         
                         st.plotly_chart(fig_traffic, use_container_width=True)
